@@ -1,0 +1,2191 @@
+// Unified Prisma Schema for Monolith E-Commerce Platform
+// Combined from all microservices
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("MONGO_URL")
+}
+
+// ============================================
+// AUTH & USER MANAGEMENT
+// ============================================
+
+model Admin {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  email         String    @unique
+  password      String?   // Optional for Google OAuth users
+  name          String
+  image         String?
+  isActive      Boolean   @default(true)
+  isVerified    Boolean   @default(false)
+  googleId      String?   @unique
+  provider      String    @default("local") // "local" or "google"
+  lastLogin     DateTime?
+  resetToken    String?
+  resetTokenExpiry DateTime?
+  verificationToken String?
+  
+  // Email OTP Verification (for mobile apps)
+  emailOTPs     Json[]    @default([]) // Array of { otp, expiresAt, createdAt }
+  
+  // FCM Push Notification Tokens (Multi-device support)
+  fcmTokens     Json[]    @default([]) // Array of { token, device, lastUsed }
+  
+  // Additional admin profile fields
+  phoneNumber   String?
+  address       String?
+  city          String?
+  state         String?
+  zipCode       String?
+  country       String?
+  dateOfBirth   DateTime?
+  currency      String?   @default("INR") // Admin's preferred currency
+  
+  // Business Information
+  companyName   String?   // Company/Business name
+  gstNumber     String?   // GST/Tax identification number
+  
+  // Onboarding Configuration (IMMUTABLE after completion)
+  onboardingCompleted Boolean @default(false)
+  
+  // Working Hours Configuration
+  workingHours  WorkingHour[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("admins")
+}
+
+model WorkingHour {
+  id        String  @id @default(auto()) @map("_id") @db.ObjectId
+  adminId   String  @db.ObjectId
+  day       String  // "Monday", "Tuesday", etc.
+  enabled   Boolean @default(true)
+  startTime String  // "00:00" format
+  endTime   String  // "23:59" format
+  
+  admin     Admin   @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([adminId, day])
+  @@map("working_hours")
+}
+
+model User {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  email         String    @unique
+  password      String?   // Optional for Google OAuth users
+  name          String
+  image         String?
+  isActive      Boolean   @default(true)
+  isVerified    Boolean   @default(false)
+  googleId      String?   @unique
+  firebaseUid   String?   // Firebase UID for phone authentication
+  provider      String    @default("local") // "local", "google", or "phone"
+  lastLogin     DateTime?
+  resetToken    String?
+  resetTokenExpiry DateTime?
+  verificationToken String?
+  
+  // Email OTP Verification (for mobile apps)
+  emailOTPs     Json[]    @default([]) // Array of { otp, expiresAt, createdAt }
+  
+  // FCM Push Notification Tokens (Multi-device support)
+  fcmTokens     Json[]    @default([]) // Array of { token, device, lastUsed }
+  
+  // Additional user profile fields
+  phoneNumber   String? 
+  address       String?
+  city          String?
+  state         String?
+  zipCode       String?
+  country       String?
+  dateOfBirth   DateTime?
+  
+  // Multiple addresses support
+  addresses     Address[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("users")
+}
+ 
+
+model Session {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+// Delivery Partner Authentication
+model DeliveryPartner {
+  id                  String    @id @default(auto()) @map("_id") @db.ObjectId
+  partnerId           String?   @unique // DP001, DP002, etc.
+  email               String    @unique
+  password            String?   // Hashed password (created when approved)
+  name                String
+  phone               String
+  
+  // Email verification
+  isEmailVerified     Boolean   @default(false)
+  emailVerificationToken String?
+  emailVerifiedAt     DateTime?
+  
+  // Password reset
+  resetToken          String?
+  resetTokenExpiry    DateTime?
+  
+  // Account status
+  isActive            Boolean   @default(true)
+  lastLogin           DateTime?
+  
+  // Synced from delivery-service
+  applicationStatus   String    @default("pending") // pending, verified, approved, rejected
+  partnerStatus       String?   // active, inactive, suspended (null until approved)
+  
+  // Personal Information
+  dateOfBirth         DateTime?
+  gender              String?  // male, female, other
+  alternateMobileNumber String?
+  profilePhoto        String?  // S3 key for profile photo
+  
+  // Address Details
+  address             String
+  city                String
+  state               String
+  pincode             String
+  country             String   @default("India")
+  
+  // ID Proof & Verification
+  aadharNumber        String?
+  aadharDocument      String?  // S3 key for Aadhar document
+  licenseNumber       String   @unique
+  licenseDocument     String?  // S3 key for License document
+  idProofDocument     String?  // S3 key for other ID proof documents
+  
+  // Vehicle Details
+  vehicleType         String   // bike, scooter, car, van
+  vehicleModel        String?
+  vehicleNumber       String   @unique
+  vehicleRCDocument   String?  // S3 key for Vehicle RC document
+  insuranceValidityDate DateTime?
+  insuranceDocument   String?  // S3 key for Insurance document
+  pollutionCertificateValidity DateTime?
+  pollutionCertDocument String?  // S3 key for Pollution certificate
+  
+  // Emergency Contact
+  emergencyContactName String?
+  emergencyRelationship String?
+  emergencyContactNumber String?
+  
+  // Status History
+  statusHistory       Json[]   @default([]) // Array of status change records
+  
+  // Partner Status
+  suspensionReason    String?  // Reason for suspension
+  suspensionNote      String?  // Detailed note for suspension
+  suspendedAt         DateTime?
+  
+  // Location Tracking
+  currentLatitude     Float?
+  currentLongitude    Float?
+  lastLocationUpdate  DateTime?
+  isOnline            Boolean  @default(false)
+  
+  // Stats
+  todayDeliveries     Int      @default(0)
+  weeklyDeliveries    Int      @default(0)
+  monthlyDeliveries   Int      @default(0)
+  averageRating       Float    @default(0.0)
+  totalRatings        Int      @default(0)
+  
+  // Availability
+  isAvailable         Boolean  @default(true)
+  rating              Float    @default(0.0)
+  totalDeliveries     Int      @default(0)
+  joiningDate         DateTime @default(now())
+  approvedAt          DateTime?
+  rejectedAt          DateTime?
+  rejectionReason     String?  // Reason for rejection
+  
+  // Orders relation
+  orders              OnlineOrder[] @relation("DeliveryPartnerOrders")
+  
+  // FCM Push Notification Tokens (Multi-device support)
+  fcmTokens           Json[]   @default([]) // Array of { token, device, lastUsed }
+  
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("delivery_partners")
+}
+
+model AffiliateApplication {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  email             String
+  fullName          String
+  phone             String?
+  city              String?
+  state             String?
+  country           String?
+  zipCode           String?
+  socialHandle      String?
+  websiteUrl        String?
+  socialLinks       Json[]   @default([]) // Array of { channel, link }
+  audienceSize      Int?
+  primaryChannel    String?
+  message           String?
+  status            String   @default("pending") // pending, approved, rejected
+  commissionRate    Float?
+  discountType      String?
+  discountValue     Float?
+  couponId          String?  @db.ObjectId
+  reviewNote        String?
+  affiliateCode     String?
+  affiliateId       String?  @db.ObjectId
+  reviewedByAdminId String?  @db.ObjectId
+  reviewedAt        DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([email])
+  @@index([status])
+  @@map("affiliate_applications")
+}
+
+model Affiliate {
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId         String?  @unique
+  email          String   @unique
+  fullName       String
+  phone          String?
+  status         String   @default("active") // active, inactive
+  deactivatedReason String?
+  deactivatedAt DateTime?
+  affiliateCode  String   @unique
+  minWithdrawalAmount Float? @default(0)
+  commissionRate Float    @default(0)
+  discountType   String?
+  discountValue  Float?
+  couponId       String?  @db.ObjectId
+  approvedAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([status])
+  @@map("affiliates")
+}
+
+model AffiliateCodeHistory {
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  affiliateId    String   @db.ObjectId
+  code           String   @unique
+  status         String   @default("active") // active, expired
+  commissionRate Float
+  discountType   String?
+  discountValue  Float?
+  maxUsageCount  Int?
+  validFrom      DateTime?
+  validUntil     DateTime?
+  couponId       String?  @db.ObjectId
+  activatedAt    DateTime @default(now())
+  expiredAt      DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([affiliateId])
+  @@index([status])
+  @@map("affiliate_code_history")
+}
+
+model Address {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String?  @db.ObjectId
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  type      String   // home, work, other
+  name      String?
+  phone     String?
+  address   String
+  city      String
+  state     String
+  zipCode   String
+  country   String
+  isDefault Boolean  @default(false)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("addresses")
+}
+
+// Customer Model (for e-commerce)
+model Customer {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId        String?   @unique // Reference to auth-service User ID
+  email         String?   @unique
+  name          String
+  image         String?
+  isVerified    Boolean   @default(false)
+  provider      String    @default("local")
+  
+  // Contact Information
+  phoneNumber   String?
+  address       String?
+  city          String?
+  state         String?
+  zipCode       String?
+  country       String?
+  dateOfBirth   DateTime?
+  
+  // Purchase Analytics
+  totalOrders   Int       @default(0)
+  totalSpent    Float     @default(0)
+  lastOrderDate DateTime?
+  
+  // Metadata
+  syncedAt      DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  wishlistItems WishlistItem[]
+  customerAddresses CustomerAddress[]
+  cartItems     Cart[]
+  orders        CustomerOrder[]
+
+  @@map("customers")
+}
+
+// Customer Address Model (for e-commerce delivery addresses)
+model CustomerAddress {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  // Customer reference
+  customerId String   @db.ObjectId
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  // Contact Details
+  name           String // Recipient name
+  phone          String // Contact phone number
+  alternatePhone String? // Alternate phone number
+
+  // Address Details
+  addressLine1 String // House/Flat No., Building Name
+  addressLine2 String? // Street, Road, Area
+  landmark     String? // Nearby landmark
+  city         String
+  state        String
+  pincode      String
+  country      String  @default("India")
+
+  // Address Type
+  addressType String @default("home") // home, work, other
+
+  // Default flag
+  isDefault Boolean @default(false)
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@map("customer_addresses")
+}
+
+// ============================================
+// INVENTORY MANAGEMENT
+// ============================================
+
+model Warehouse {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  name       String   @unique
+  address    String
+  city       String
+  state      String
+  postalCode String
+  country    String
+  manager    String
+  phone      String
+  status     String   @default("active")
+  items      Item[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("warehouses")
+}
+
+model Item {
+  id                  String     @id @default(auto()) @map("_id") @db.ObjectId
+  itemName            String
+  category            String
+  itemCode            String?
+  barcode             String?
+  brand               String?
+  
+  // 🆕 Multi-UOM Fields
+  baseUom             String     @default("pcs") // Primary unit (e.g., "kg", "L")
+  availableUoms       Json[]     @default([]) // Array of {uom: "g", conversionFactor: 1000}
+  uomLocked           Boolean    @default(false) // Lock after online product creation
+  
+  // OLD FIELD - Deprecated but kept for backward compatibility
+  uom                 String     @default("pcs")
+  
+  purchasePrice       Float
+  sellingPrice        Float?
+  mrp                 Float?
+  gstRateId           String?    @db.ObjectId // Reference to GST Rate
+  gstPercentage       Float      @default(0.0)
+  hsnCode             String?
+  discountType        String?   // percentage, fixed, none
+  discountValue       Float?
+  warehouseId         String     @db.ObjectId
+  warehouse           Warehouse  @relation(fields: [warehouseId], references: [id])
+  openingStock        Float
+  quantity            Float      // Always stored in baseUom
+  lowStockAlertLevel  Float
+  status              String     @default("in_stock") // in_stock, low_stock, out_of_stock
+  display             String     @default("inactive") // active, inactive - for POS display toggle
+  expiryDate          DateTime?
+  mfgDate             DateTime?
+  batchNo             String?
+  safetyInformation   String?
+  description         String?
+  itemImage           String?
+  
+  // 🆕 Processing Item Fields
+  itemType            String     @default("regular") // regular, processing
+  requiresProcessing  Boolean    @default(false)
+  
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+
+  @@map("items")
+}
+
+model InventoryCategory {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("inventory_categories")
+}
+
+model StockAdjustment {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  itemId            String   @db.ObjectId
+  itemName          String
+  category          String   // Item category
+  warehouseId       String   @db.ObjectId
+  warehouseName     String   // Denormalized for reporting
+  
+  // Adjustment Method: "adjustment", "purchase_order", "sales_order"
+  adjustmentMethod  String   @default("adjustment")
+  
+  // Adjustment Type: "increase" or "decrease"
+  adjustmentType    String
+  
+  quantity          Float
+  previousQuantity  Float
+  newQuantity       Float
+  uom               String   @default("unit")
+  
+  // 🆕 Original input data (before conversion)
+  originalQuantity  Float?
+  originalUom       String?
+  
+  // For manual adjustments
+  reason            String?  // "damage", "loss", "return", "found", "correction", "expired", "other"
+  reasonDetails     String?  // Additional details about the reason
+  adjustedBy        String   // User who made the adjustment
+  notes             String?
+  
+  // For purchase_order method
+  purchaseOrderId   String?  // Reference to PO
+  poNumber          String?  // PO-2024-001
+  billId            String?  // Reference to Bill/GRN
+  grnNumber         String?  // GRN-2024-001
+  supplierId        String?  // Supplier reference
+  supplierName      String?  // Supplier name
+  batchNumber       String?  // Batch tracking
+  expiryDate        DateTime? // Expiry tracking
+  manufacturingDate DateTime? // Manufacturing date
+  
+  // For sales_order method
+  salesOrderId      String?  // Reference to Sales Order
+  soNumber          String?  // SO-2024-001
+  customerId        String?  // Customer reference
+  customerName      String?  // Customer name
+  
+  createdAt         DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([itemId])
+  @@index([warehouseId])
+  @@index([adjustmentMethod])
+  @@index([grnNumber])
+  @@index([soNumber])
+  @@map("stock_adjustments")
+}
+
+// ============================================
+// E-COMMERCE PRODUCTS
+// ============================================
+
+model Category {
+  id    String  @id @default(auto()) @map("_id") @db.ObjectId
+  name  String  @unique
+  image String?
+
+  // SEO fields
+  metaTitle       String?
+  metaDescription String?
+  metaKeywords    String?
+
+  // Status
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  // Relations
+  subcategories Subcategory[]
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("online_categories")
+}
+
+model Subcategory {
+  id    String  @id @default(auto()) @map("_id") @db.ObjectId
+  name  String
+  image String?
+
+  // SEO fields
+  metaTitle       String?
+  metaDescription String?
+  metaKeywords    String?
+
+  // Status
+  isActive Boolean @default(true)
+
+  // Relations
+  categoryId String   @db.ObjectId
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([categoryId, name])
+  @@map("online_subcategories")
+}
+
+model Brand {
+  id   String @id @default(auto()) @map("_id") @db.ObjectId
+  name String @unique
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("brands")
+}
+
+model Badge {
+  id                 String  @id @default(auto()) @map("_id") @db.ObjectId
+  name               String  @unique
+  isStatic           Boolean @default(false) // True for system badges, false for custom
+  sortOrder          Int     @default(0) // Display order (lower = first)
+  enabledForHomepage Boolean @default(true) // Show in homepage badge selector
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("badges")
+}
+
+model CuttingStyle {
+  id          String  @id @default(auto()) @map("_id") @db.ObjectId
+  name        String  @unique
+  description String?
+  isActive    Boolean @default(true)
+  sortOrder   Int     @default(0) // For ordering in dropdown
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("cutting_styles")
+}
+
+model OnlineProduct {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  // Basic Details
+  category         String
+  subCategory      String?
+  brand            String
+  shortDescription String
+
+  // Variants (contains all stock info per variant)
+  // Each variant JSON contains: variantName, displayName, dropdownName, variantSKU, inventoryProductId, 
+  // variantHSN, variantBarcode, variantColour, variantSize, variantMaterial, customAttributes,
+  // variantGST, discountType, variantDiscount, variantMRP, variantSellingPrice, variantPurchasePrice,
+  // variantStockQuantity, variantLowStockAlert, variantStockStatus, variantWeight, variantLength,
+  // variantWidth, variantHeight, detailedDescription, variantStatus, variantImages, isDefault
+  enableVariants Boolean
+  variants       Json[] // Array of variant objects
+
+  // Cutting Styles (for meat/fish products)
+  cuttingStyles String[] // Array of cutting style IDs
+
+  // Pricing & Tax
+  hsnCode              String
+  gstPercentage        Float   @default(0.0)
+  defaultMRP           Float
+  defaultSellingPrice  Float
+  defaultPurchasePrice Float
+  discountType         String  @default("Percent") // Percent or Flat
+  defaultDiscountValue Float   @default(0)
+  isCODAvailable       Boolean @default(true)
+  shippingCharge       Float   @default(0)
+  freeShipping         Boolean @default(false)
+
+  // Visibility & SEO
+  productStatus      String  @default("draft") // draft, active
+  showOnHomepage     Boolean @default(false)
+  homepageBadgeId    String? @db.ObjectId // Reference to Badge ID
+  showInProductsPage Boolean @default(true)
+  productsPageBadgeId String? @db.ObjectId // Reference to Badge ID
+  metaTitle          String?
+  metaDescription    String?
+  metaKeywords       String?
+
+  // Compliance
+  expiryDate        DateTime?
+  mfgDate           DateTime?
+  batchNo           String?
+  safetyInformation String?
+
+  // Additional Fields
+  returnPolicyApplicable Boolean @default(true)
+  returnWindowDays       Int     @default(7)
+  warrantyDetails        String?
+  countryOfOrigin        String  @default("India")
+
+  // Frequently Bought Together (Add-ons)
+  frequentlyBoughtTogether Json[] @default([]) // Array of { productId, variantIndex, isDefaultSelected }
+
+  // Combo Product Fields
+  type                    String?   @default("regular")  // "regular" or "combo"
+  comboItems              Json[]    @default([])         // Array of { productId, variantIndex, quantity, productName, variantName, variantImage, variantPrice, variantUom, variantUomValue }
+  thumbnail               String?                        // S3 key for combo cover image
+  isComboHomePageEnabled  Boolean   @default(false)       // Show combo on homepage
+
+
+
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("online_products")
+}
+
+model ProductReview {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  productId   String @db.ObjectId
+  productName String
+
+  userId    String @db.ObjectId
+  userName  String
+  userEmail String
+  userImage String?
+
+  orderId     String @db.ObjectId
+  orderNumber String
+
+  rating  Int
+  title   String?
+  comment String?
+  images  String[]
+
+  status             String  @default("approved") // approved, pending, rejected, hidden
+  isVerifiedPurchase Boolean @default(true)
+
+  adminNote String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId])
+  @@index([userId])
+  @@index([status])
+  @@index([orderId])
+  @@unique([productId, userId, orderId])
+  @@map("product_reviews")
+}
+
+model RewardSettings {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  enabled Boolean @default(false)
+  programName String @default("Rewards")
+
+  // Earn rules: pointsPerUnit for each currencyUnit spent
+  currencyUnit Float @default(100)
+  pointsPerUnit Int @default(1)
+  minOrderValue Float @default(0)
+  maxPointsPerOrder Int?
+  signupBonus Int @default(0)
+
+  // Redeem rules
+  redeemEnabled Boolean @default(false)
+  redeemMinPoints Int @default(0)
+  redeemMaxPoints Int?
+  redeemValuePerPoint Float @default(1) // currency value per point
+  refundRedeemOnCancel Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("reward_settings")
+}
+
+model RewardWallet {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+  userId String @unique @db.ObjectId
+
+  balance Int @default(0)
+  totalEarned Int @default(0)
+  totalRedeemed Int @default(0)
+  lastEarnedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("reward_wallets")
+}
+
+model RewardTransaction {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+  userId String @db.ObjectId
+  orderId String? @db.ObjectId
+  adminId String? @db.ObjectId
+
+  type String // earn, redeem, adjust, refund, expire
+  points Int
+  balanceAfter Int
+  note String?
+  status String @default("completed")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([orderId])
+  @@index([type])
+  @@map("reward_transactions")
+}
+
+model Coupon {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  // Basic Details
+  code          String  @unique
+  description   String?
+  discountType  String // "percentage" or "flat"
+  discountValue Float
+  isAffiliateCoupon Boolean @default(false)
+
+  // Usage Limits
+  usageType         String @default("multi-use") // "single-use", "multi-use", "first-time-user-only"
+  maxUsageCount     Int? // null = unlimited
+  currentUsageCount Int    @default(0)
+  maxUsagePerUser   Int? // null = unlimited
+
+  // Validity
+  validFrom  DateTime
+  validUntil DateTime
+  isActive   Boolean  @default(true)
+
+  // Order Constraints
+  minOrderValue     Float? // Minimum order value to apply coupon
+  maxDiscountAmount Float? // Maximum discount cap for percentage coupons
+
+  // Product Categories (empty array = all categories)
+  applicableCategories String[] @db.ObjectId // Array of category IDs
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("coupons")
+}
+
+model AffiliateEarning {
+  id               String   @id @default(auto()) @map("_id") @db.ObjectId
+  affiliateId      String   @db.ObjectId
+  orderId          String   @db.ObjectId
+  orderNumber      String
+  orderTotal       Float
+  commissionRate   Float
+  commissionAmount Float
+  status           String   @default("pending") // pending, available, paid, cancelled
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([affiliateId])
+  @@index([orderId])
+  @@index([status])
+  @@map("affiliate_earnings")
+}
+
+model AffiliateWithdrawalRequest {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  affiliateId  String   @db.ObjectId
+  amount       Float
+  status       String   @default("pending") // pending, approved, rejected, paid
+  note         String?
+  requestedAt  DateTime @default(now())
+  processedAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([affiliateId])
+  @@index([status])
+  @@map("affiliate_withdrawals")
+}
+
+model CouponUsage {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  couponId   String  @db.ObjectId
+  couponCode String
+  userId     String // User who used the coupon
+  orderId    String? // Associated order ID
+
+  discountAmount Float
+  orderValue     Float
+
+  usedAt DateTime @default(now())
+
+  @@index([couponId])
+  @@index([userId])
+  @@map("coupon_usage")
+}
+
+model WishlistItem {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  customerId String?   @db.ObjectId
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  // Product Information
+  productId   String // Reference to OnlineProduct ID
+  productData Json // Full product data snapshot
+
+  // Timestamps
+  addedAt   DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  @@index([customerId, productId]) // Index for lookups (when customerId exists)
+  @@index([customerId])
+  @@index([productId])
+  @@map("wishlist_items")
+}
+
+model Cart {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  // Customer reference (optional for backward compatibility with old data)
+  customerId String?   @db.ObjectId
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  // User reference (from auth-service) - kept for backward compatibility
+  userId String
+
+  // Product reference
+  inventoryProductId String // Reference to inventory product variant
+  productId          String @db.ObjectId // Reference to OnlineProduct
+  variantIndex       Int
+
+  // Quantity
+  quantity Float @default(1)
+
+  // Cached product data for display (updated on add/sync)
+  maxStock            Float
+  shortDescription    String
+  brand               String
+  category            String // Product category name
+  categoryId          String @db.ObjectId // Product category ID
+  variantName         String
+  displayName         String?
+  variantSellingPrice Float
+  variantMRP          Float
+  variantImage        String?
+  selectedCuttingStyle String?
+  
+  // 🆕 Multi-UOM fields for stock display
+  variantUom       String? // Unit of measure (e.g., "g", "ml", "kg")
+  variantUomValue  Float?  // Value per unit (e.g., 500 for 500g per unit)
+  
+  // 🆕 Shipping fields for delivery cost calculation
+  freeShipping    Boolean @default(false)
+  shippingCharge  Float   @default(0)
+  
+  // 🆕 Combo fields
+  isComboProduct   Boolean @default(false)
+  comboItems       Json[]  @default([])
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Unique constraint: one item per customer per variant (when customerId exists)
+  @@index([customerId, inventoryProductId])
+  @@index([userId]) // Fast lookups by userId (backward compatibility)
+  @@index([customerId]) // Fast lookups by customer
+  @@index([productId]) // Fast lookups by product
+  @@index([inventoryProductId]) // Fast lookups by inventory variant
+  @@map("carts")
+}
+
+// ============================================
+// POS (POINT OF SALE)
+// ============================================
+
+// POS Product Model - Customized products for POS display
+// Data is edited from inventory items and stored separately for POS
+model POSProduct {
+  id                  String    @id @default(auto()) @map("_id") @db.ObjectId
+  
+  // Reference to original inventory item
+  itemId              String    @db.ObjectId // Reference to Item model
+  itemName            String
+  category            String
+  itemCode            String?
+  brand               String?
+  uom                 String
+  baseUom             String?   // Base UOM from inventory (e.g., "kg")
+  availableUoms       String[]  @default([]) // Available UOMs for this category
+  uomLocked           Boolean   @default(false)
+  variantUomValue     Float?    // Quantity per unit if applicable
+  uomVariants         Json[]    @default([]) // Dynamic UOM options with prices
+
+  
+  // Pricing (can be edited for POS)
+  purchasePrice       Float
+  sellingPrice        Float?
+  mrp                 Float?
+  
+  // GST Information
+  gstRateId           String?   @db.ObjectId
+  gstPercentage       Float     @default(0.0)
+  hsnCode             String?
+  
+  // Discount (can be edited for POS)
+  discountType        String?   // percentage, flat, none
+  discountValue       Float?
+  
+  // Stock Information (synced from inventory)
+  warehouse           String
+  quantity            Float
+  openingStock        Float
+  lowStockAlertLevel  Float
+  status              String    @default("in_stock") // in_stock, low_stock, out_of_stock
+  
+  // POS Display Control
+  display             String    @default("inactive") // active, inactive - Toggle for POS visibility
+  
+  // Product Details (can be edited for POS)
+  expiryDate          DateTime?
+  mfgDate             DateTime?
+  batchNo             String?
+  safetyInformation   String?
+  description         String?
+  itemImage           String?   // S3 key or URL
+  
+  // Sync metadata
+  syncedAt            DateTime  @default(now())
+  lastSyncedFromItem  DateTime  @default(now())
+  
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([itemId])
+  @@index([display])
+  @@index([category])
+  @@map("pos_products")
+}
+
+// ============================================
+// ORDERS
+// ============================================
+
+model POSOrder {
+  id              String        @id @default(auto()) @map("_id") @db.ObjectId
+  orderNumber     String        @unique
+  invoiceNumber   String?       @unique
+  orderType       String        @default("pos") // pos, online, offline
+  
+  // Customer Information
+  customerId      String?
+  customerName    String?
+  customerEmail   String?
+  customerPhone   String?
+  
+  // Order Items
+  items           POSOrderItem[]
+  
+  // Pricing
+  subtotal        Float
+  tax             Float
+  taxRate         Float
+  discount        Float         @default(0)
+  roundingOff     Float         @default(0)
+  total           Float
+  
+  // Payment
+  paymentMethod   String        // cash, card, upi
+  paymentStatus   String        @default("completed") // completed, pending, failed
+  amountReceived  Float
+  changeGiven     Float         @default(0)
+  
+  // Status
+  orderStatus     String        @default("completed") // completed, cancelled, refunded
+  
+  // Finance Fields
+  saleDate        DateTime?     @default(now()) // Date of sale for reporting
+  accountingPeriod String?      // YYYY-MM format (e.g., "2024-01")
+  financialYear   String?       // Financial year (e.g., "2024-25")
+  
+  // Metadata
+  createdBy       String?       // User/Cashier ID
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  completedAt     DateTime?
+  
+  @@map("pos_orders")
+}
+
+model POSOrderItem {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  orderId         String    @db.ObjectId
+  order           POSOrder  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  // Product Information
+  productId       String
+  productName     String
+  productSku      String?
+  barcodes        String[]  @default([]) // Array of barcodes for the product
+  
+  // Pricing
+  unitPrice       Float
+  quantity        Float
+  discount        Float     @default(0) // percentage
+  subtotal        Float
+  total           Float
+  
+  // GST Information
+  gstPercentage   Float     @default(0)
+  gstAmount       Float     @default(0)
+  priceBeforeGst  Float     @default(0) // Price excluding GST
+  
+  // Multi-UOM Information
+  variantUom      String?   // The UOM selected for this variant (e.g., "g", "kg")
+  variantUomValue Float?    // The quantity per unit (e.g., 500 for 500g)
+  
+  createdAt       DateTime  @default(now())
+  
+  @@map("pos_order_items")
+}
+
+model OnlineOrder {
+  id              String           @id @default(auto()) @map("_id") @db.ObjectId
+  orderNumber     String           @unique
+  invoiceNumber   String?          @unique
+  orderType       String           @default("online") // online, live, pre_order
+  scheduledDate   String?          // e.g. "2024-03-02"
+  scheduledSlot   String?          // e.g. "09:00 AM - 12:00 PM"
+  isScheduled     Boolean          @default(false)
+  
+  // Customer Information
+  customerId      String           @db.ObjectId
+  userId          String           // Auth service user ID
+  customerName    String
+  customerEmail   String
+  customerPhone   String?
+  
+  // Delivery Address
+  deliveryAddress Json
+  
+  // Order Items
+  items           Json[]           // Array of order items
+  
+  // Pricing
+  subtotal        Float
+  tax             Float
+  taxRate         Float
+  
+  // GST Breakdown (based on admin and customer states)
+  gstType         String           @default("cgst_sgst") // "cgst_sgst" or "igst"
+  cgstAmount      Float            @default(0)
+  sgstAmount      Float            @default(0)
+  igstAmount      Float            @default(0)
+  totalGstAmount  Float            @default(0)
+  
+  // State Information for GST calculation
+  adminState      String?          // Admin/Company state
+  customerState   String?          // Customer delivery state
+  
+  discount        Float            @default(0)
+  couponCode      String?
+  couponDiscount  Float            @default(0)
+  rewardPointsRedeemed Int         @default(0)
+  rewardDiscount  Float            @default(0)
+  shippingCharge  Float            @default(0)
+  total           Float
+
+  // Affiliate Attribution
+  affiliateCode   String?
+  affiliateId     String?          @db.ObjectId
+  
+  // Payment
+  paymentMethod   String           // razorpay, stripe, cod
+  paymentStatus   String           @default("pending") // pending, completed, failed, refunded
+  paymentId       String?          // Payment gateway transaction ID
+  
+  // Status
+  orderStatus     String           @default("pending") // pending, confirmed, packing, shipped, delivered, cancelled
+  
+  // Delivery Partner Assignment
+  deliveryPartnerId    String?    @db.ObjectId
+  deliveryPartner      DeliveryPartner? @relation("DeliveryPartnerOrders", fields: [deliveryPartnerId], references: [id])
+  estimatedDeliveryTime DateTime?
+  deliveryNotes        String?
+  deliveryAssignAt     DateTime?
+  deliveryAcceptedAt   DateTime?  // When partner accepted the order
+  deliveryPickedAt     DateTime?  // When partner picked up the order
+  
+  // Partner Rating (by customer after delivery)
+  partnerRating        Float?     // 1-5 stars
+  partnerRatingComment String?    // Optional comment
+  ratedAt              DateTime?  // When customer rated
+  
+  // Courier Tracking Information
+  courierPartner       String?    // Courier company name (e.g., "Blue Dart", "DTDC")
+  trackingNumber       String?    // Tracking number from courier
+  courierLink          String?    // Full tracking URL
+  estimatedDelivery    DateTime?  // Estimated delivery date
+  courierNotes         String?    // Additional notes for courier tracking
+  
+  // Finance Fields
+  saleDate        DateTime?        @default(now()) // Date of sale for reporting
+  accountingPeriod String?         // YYYY-MM format (e.g., "2024-01")
+  financialYear   String?          // Financial year (e.g., "2024-25")
+  
+  // Metadata
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  confirmedAt     DateTime?
+  packingAt       DateTime?
+  shippedAt       DateTime?
+  deliveredAt     DateTime?
+  cancelledAt     DateTime?
+  
+  @@index([customerId])
+  @@index([userId])
+  @@index([orderStatus])
+  @@index([paymentStatus])
+  @@index([deliveryPartnerId])
+  @@map("online_orders")
+}
+
+model CourierSettings {
+  id                String    @id @default(auto()) @map("_id") @db.ObjectId
+  
+  // Simple enable/disable
+  isEnabled         Boolean   @default(false)
+  
+  // Saved courier links (first time setup)
+  courierLinks      Json[]    @default([]) // Array of { name, trackingUrlTemplate }
+  
+  // Timestamps
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  @@map("courier_settings")
+}
+
+model CustomerOrder {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  customerId      String    @db.ObjectId
+  customer        Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  
+  // Order Details
+  orderId         String    // Reference to order-service order ID
+  orderNumber     String
+  invoiceNumber   String?
+  orderType       String    @default("pos")
+  
+  // Financial
+  subtotal        Float
+  tax             Float     @default(0)
+  discount        Float     @default(0)
+  total           Float
+  
+  // Payment
+  paymentMethod   String
+  paymentStatus   String    @default("completed")
+  
+  // Items Summary
+  itemCount       Int
+  totalQuantity   Int
+  
+  // Timestamps
+  orderDate       DateTime  @default(now())
+  completedAt     DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@map("customer_orders")
+  @@index([customerId])
+  @@index([orderNumber])
+}
+
+// ============================================
+// FINANCE
+// ============================================
+
+model Transaction {
+  id                    String    @id @default(auto()) @map("_id") @db.ObjectId
+  transactionId         String    @unique
+  transactionType       String    // sale, purchase, refund, adjustment
+  
+  // Reference to source
+  referenceType         String    // online_order, pos_order, purchase_order, manual
+  referenceId           String?   // ID of the referenced entity
+  referenceNumber       String    // Order number, invoice number, etc.
+  
+  // Financial details
+  amount                Float
+  currency              String    @default("INR")
+  taxAmount             Float     @default(0)
+  discountAmount        Float     @default(0)
+  shippingAmount        Float     @default(0)
+  netAmount             Float
+  
+  // Payment details
+  paymentMethod         String?   // cash, card, upi, razorpay, stripe, cod
+  paymentStatus         String    @default("pending") // pending, completed, failed, refunded
+  paymentId             String?   // Gateway payment ID
+  paymentGateway        String?   // razorpay, stripe, etc.
+  gatewayTransactionId  String?   // Gateway's transaction ID
+  
+  // Customer details
+  customerId            String?
+  customerName          String?
+  customerEmail         String?
+  customerPhone         String?
+  userId                String?
+  
+  // Accounting details
+  accountingPeriod      String?   // YYYY-MM format
+  financialYear         String?   // 2024-25
+  transactionDate       DateTime  @default(now())
+  
+  // Revenue recognition
+  revenueAmount         Float     @default(0) // Amount recognized as revenue
+  revenueRecognitionDate DateTime?
+  revenueRecognitionReason String? // payment_completed, delivery_confirmed, etc.
+  
+  // Metadata
+  description           String?
+  notes                 String?
+  source                String?   // online-service, offline-service, etc.
+  createdBy             String?
+  
+  // Gateway Response
+  gatewayResponse Json?    // Store full gateway response
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  completedAt           DateTime?
+
+  @@index([transactionType])
+  @@index([referenceType])
+  @@index([referenceNumber])
+  @@index([paymentStatus])
+  @@index([accountingPeriod])
+  @@index([financialYear])
+  @@index([transactionDate])
+  @@index([customerId])
+  @@index([userId])
+  @@map("transactions")
+}
+
+model InvoiceSettings {
+  id                     String   @id @default(auto()) @map("_id") @db.ObjectId
+  invoicePrefix          String   @default("INV")
+  invoiceSequenceLength  Int      @default(4)
+  financialYearStart     DateTime // Full date with year
+  financialYearEnd       DateTime // Full date with year
+  autoFinancialYear      Boolean  @default(true)
+  manualFinancialYear    String?
+  invoiceFormat          String   @default("{PREFIX}-{FY}-{SEQ}")
+  isActive               Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@map("invoice_settings")
+}
+
+model InvoiceSequence {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  financialYear     String   @unique
+  currentSequenceNo Int      @default(1)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("invoice_sequences")
+}
+
+model GSTRate {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  name            String
+  gstPercentage   Float
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("gst_rates")
+}
+
+model PaymentGateway {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  name          String   @unique // razorpay, stripe, cod
+  apiKey        String?
+  secretKey     String?
+  webhookSecret String?
+  isActive      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("payment_gateways")
+}
+
+// ============================================
+// PURCHASE ORDERS
+// ============================================
+
+model Supplier {
+  id                              String          @id @default(auto()) @map("_id") @db.ObjectId
+  name                            String
+  supplierType                    String?
+  contactPersonName               String?
+  phone                           String
+  alternatePhone                  String?
+  email                           String
+  billingAddressLine1             String?
+  billingAddressLine2             String?
+  city                            String?
+  state                           String?
+  postalCode                      String?
+  country                         String?
+  shippingAddressSameAsBilling    Boolean         @default(true)
+  shippingAddressLine1            String?
+  shippingAddressLine2            String?
+  shippingCity                    String?
+  shippingState                   String?
+  shippingPostalCode              String?
+  shippingCountry                 String?
+  taxId                           String?
+  remarks                         String?
+  attachments                     String?
+  status                          String          @default("active")
+  createdAt                       DateTime        @default(now())
+  updatedAt                       DateTime        @updatedAt
+  
+  // Relations
+  purchaseOrders                  PurchaseOrder[]
+  bills                           Bill[]
+
+  @@map("suppliers")
+}
+
+model PurchaseOrder {
+  id                    String              @id @default(auto()) @map("_id") @db.ObjectId
+  poId                  String              @unique // PO-2024-001
+  
+  // Supplier Information
+  supplierId            String              @db.ObjectId
+  supplier              Supplier?           @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  supplierName          String              // Denormalized for quick access
+  contactPersonName     String?
+  supplierPhone         String
+  supplierEmail         String
+  supplierGSTIN         String?
+  
+  // Addresses
+  billingAddress        String
+  shippingAddress       String
+  
+  // Warehouse Information
+  warehouseId           String              // Reference to synced warehouse
+  warehouseName         String              // Denormalized
+  
+  // Purchase Order Details
+  poDate                DateTime
+  expectedDeliveryDate  DateTime
+  poStatus              String              @default("draft") // draft, completed
+  poNotes               String?
+  
+  // Items
+  items                 PurchaseOrderItem[]
+  
+  // Financial Summary
+  subTotal              Float               @default(0)
+  totalQuantity         Int                 @default(0)
+  discount              Float               @default(0)
+  discountType          String              @default("flat") // flat, percentage
+  totalCGST             Float               @default(0)
+  totalSGST             Float               @default(0)
+  totalIGST             Float               @default(0)
+  totalGST              Float               @default(0)
+  otherCharges          Float               @default(0)
+  roundingAdjustment    Float               @default(0)
+  grandTotal            Float               @default(0)
+  
+  // Relations
+  bills                 Bill[]              // Bills/GRN created against this PO
+  
+  // Metadata
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  @@index([supplierId])
+  @@index([poStatus])
+  @@index([poDate])
+  @@index([warehouseId])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id                  String        @id @default(auto()) @map("_id") @db.ObjectId
+  
+  // Purchase Order Reference
+  purchaseOrderId     String        @db.ObjectId
+  purchaseOrder       PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  
+  // Item Information (from synced inventory)
+  itemId              String?       // Reference to synced item (optional if custom item)
+  category            String
+  productName         String
+  sku                 String?
+  hsnCode             String?
+  
+  // Quantity & Pricing
+  quantity            Float
+  uom                 String        @default("PCS")
+  price               Float         // Purchase price per unit
+  
+  // GST Information
+  gstRateId           String?       @db.ObjectId // Reference to GST Rate from finance service
+  gstPercentage       Float         @default(0.0)
+  gstType             String        // cgst_sgst, igst
+  cgstPercentage      Float         @default(0)
+  sgstPercentage      Float         @default(0)
+  igstPercentage      Float         @default(0)
+  cgstAmount          Float         @default(0)
+  sgstAmount          Float         @default(0)
+  igstAmount          Float         @default(0)
+  totalGstAmount      Float         @default(0)
+  
+  // Additional Fields
+  mrp                 String?       // Optional MRP
+  itemTotal           Float         @default(0) // quantity × price
+  totalPrice          Float         @default(0) // itemTotal + totalGstAmount
+  
+  // Metadata
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  @@index([purchaseOrderId])
+  @@index([itemId])
+  @@map("purchase_order_items")
+}
+
+model Bill {
+  id                    String        @id @default(auto()) @map("_id") @db.ObjectId
+  billId                String        @unique // Same as GRN Number (GRN-2024-001)
+  grnNumber             String        @unique // GRN-2024-001 (primary identifier)
+  
+  // Purchase Order Reference (optional)
+  purchaseOrderId       String?       @db.ObjectId
+  purchaseOrder         PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  poNumber              String?       // Denormalized PO number for quick access (e.g., PO-2024-001)
+  
+  // Supplier Information (denormalized from PO)
+  supplierId            String        @db.ObjectId
+  supplier              Supplier?     @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  supplierName          String
+  supplierPhone         String
+  supplierEmail         String
+  supplierGSTIN         String?
+  
+  // Bill Details
+  supplierInvoiceNo     String        // Supplier's invoice number
+  supplierInvoiceDate   DateTime      // Date on supplier's invoice
+  billDate              DateTime      // Date of bill entry in system
+  billDueDate           DateTime?     // Payment due date
+  receivedDate          DateTime      // Date goods were received
+  
+  // Warehouse Information
+  warehouseId           String
+  warehouseName         String
+  
+  // Addresses
+  billingAddress        String
+  shippingAddress       String
+  
+  // Transport & Delivery
+  transporterName       String?
+  vehicleNumber         String?
+  lrNumber              String?       // Lorry Receipt Number
+  eWayBillNumber        String?
+  
+  // Payment Information
+  paymentStatus         String        @default("unpaid") // unpaid, partial, paid
+  paymentDate           DateTime?     // Date when payment was made
+  paidAmount            Float         @default(0)
+  
+  // Items
+  items                 BillItem[]
+  
+  // Financial Summary
+  subTotal              Float         @default(0)
+  totalQuantity         Int           @default(0)
+  totalDiscount         Float         @default(0) // Calculated discount amount
+  discount              Float         @default(0) // Discount value (flat amount or percentage)
+  discountType          String        @default("flat") // flat, percentage
+  totalCGST             Float         @default(0)
+  totalSGST             Float         @default(0)
+  totalIGST             Float         @default(0)
+  totalGST              Float         @default(0)
+  otherCharges          Float         @default(0)
+  roundingAdjustment    Float         @default(0)
+  grandTotal            Float         @default(0)
+  
+  // Documents & Notes
+  invoiceCopyUrl        String?       // URL to uploaded invoice copy
+  remarks               String?
+  
+  // Status
+  billStatus            String        @default("draft") // draft, completed
+  
+  // Metadata
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  @@index([purchaseOrderId])
+  @@index([supplierId])
+  @@index([billStatus])
+  @@index([paymentStatus])
+  @@index([billDate])
+  @@index([receivedDate])
+  @@index([warehouseId])
+  @@map("bills")
+}
+
+model BillItem {
+  id                  String   @id @default(auto()) @map("_id") @db.ObjectId
+  
+  // Bill Reference
+  billId              String   @db.ObjectId
+  bill                Bill     @relation(fields: [billId], references: [id], onDelete: Cascade)
+  
+  // Item Information
+  itemId              String?  // Reference to synced item
+  category            String
+  productName         String
+  sku                 String?
+  hsnCode             String?
+  
+  // Quantity & Pricing
+  orderedQuantity     Float      // Quantity from PO
+  receivedQuantity    Float      // Actual quantity received
+  acceptedQuantity    Float      // Quantity accepted
+  rejectedQuantity    Float      @default(0)
+  uom                 String   @default("PCS")
+  price               Float    // Purchase price per unit
+  
+  // GST Information (matching purchase form structure)
+  gstRateId           String?  @db.ObjectId // Reference to GST Rate from finance service
+  gstPercentage       Float    @default(0.0)
+  gstType             String   // cgst_sgst, igst
+  cgstPercentage      Float    @default(0)
+  sgstPercentage      Float    @default(0)
+  igstPercentage      Float    @default(0)
+  cgstAmount          Float    @default(0)
+  sgstAmount          Float    @default(0)
+  igstAmount          Float    @default(0)
+  totalGstAmount      Float    @default(0)
+  
+  // Calculations
+  mrp                 String?
+  itemTotal           Float    @default(0) // acceptedQuantity × price
+  totalPrice          Float    @default(0) // itemTotal + totalGstAmount
+
+  
+  // Batch & Expiry (for inventory tracking)
+  batchNumber         String?
+  expiryDate          DateTime?
+  manufacturingDate   DateTime?
+  
+  // Metadata
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([billId])
+  @@index([itemId])
+  @@map("bill_items")
+}
+
+model ExpenseCategory {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  name        String    @unique
+  description String?
+  isActive    Boolean   @default(true)
+  
+  // Relations
+  expenses    Expense[]
+  
+  // Metadata
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("expenses_category")
+}
+
+model Expense {
+  id              String          @id @default(auto()) @map("_id") @db.ObjectId
+  expenseNumber   String          @unique
+  
+  // Category Reference
+  categoryId      String          @db.ObjectId
+  category        ExpenseCategory @relation(fields: [categoryId], references: [id])
+  categoryName    String          // Denormalized for quick access
+  
+  // Expense Details
+  expense         String          // Expense name/title
+  description     String?         // Optional description
+  amount          Float
+  expenseDate     DateTime
+  
+  // Payment Information
+  paymentMethod   String?         // Cash, Credit Card, Bank Transfer, etc.
+  
+  // Supplier/Vendor Information
+  supplierId      String?         @db.ObjectId // Reference to supplier (optional)
+  supplierName    String?         // Supplier name (can be from existing supplier or custom)
+  vendor          String?         // Deprecated: kept for backward compatibility
+  
+  // Receipt/Attachment
+  receiptUrl      String?         // S3 URL or key for receipt/invoice image
+  
+  // Status
+  status          String          @default("pending") // pending, paid, rejected
+  
+  // Notes
+  notes           String?
+  
+  // Metadata
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([categoryId])
+  @@index([supplierId])
+  @@index([expenseDate])
+  @@index([status])
+  @@index([createdAt])
+  @@map("expenses")
+}
+
+// ============================================
+// DELIVERY MANAGEMENT
+// ============================================
+
+model Delivery {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  orderId           String   @unique
+  deliveryPartnerId String?  @db.ObjectId
+  customerName      String
+  customerPhone     String
+  deliveryAddress   String
+  city              String
+  state             String
+  pincode           String
+  status            String   @default("pending") // pending, assigned, picked_up, in_transit, delivered, cancelled
+  assignedAt        DateTime?
+  pickedUpAt        DateTime?
+  deliveredAt       DateTime?
+  estimatedDelivery DateTime?
+  actualDelivery    DateTime?
+  deliveryFee       Float    @default(0.0)
+  notes             String?
+  latitude          Float?
+  longitude         Float?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("deliveries")
+}
+
+// Real-time Delivery Tracking
+model DeliveryTracking {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  orderId       String   @db.ObjectId
+  status        String   // assigned, picked_up, in_transit, delivered, failed
+  latitude      Float?
+  longitude     Float?
+  address       String?
+  timestamp     DateTime @default(now())
+  notes         String?
+
+  @@index([orderId])
+  @@index([timestamp])
+  @@map("delivery_tracking")
+}
+
+// Partner Notifications
+model PartnerNotification {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  partnerId   String   @db.ObjectId
+  type        String   // new_delivery, status_update, system
+  title       String
+  message     String
+  data        Json?
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([partnerId])
+  @@index([isRead])
+  @@map("partner_notifications")
+}
+
+// ============================================
+// WEB SETTINGS & CONFIGURATION
+// ============================================
+
+model WebSettings {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  logoKey    String?  // S3 key for logo
+  faviconKey String?  // S3 key for favicon
+  logoUrl    String?  // Alternative: direct URL
+  faviconUrl String?  // Alternative: direct URL
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("web_settings")
+}
+
+model Faq {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  title     String
+  contents  Json[]   @default([])
+  sortOrder Int?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("faqs")
+}
+
+model CompanySettings {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  // Basic Information
+  companyName String
+  tagline     String  @default("")
+  description String  @default("")
+
+  // Contact Information
+  email   String
+  phone   String
+  website String @default("")
+
+  // Address Information
+  address String @default("")
+  city    String @default("")
+  state   String @default("")
+  zipCode String @default("")
+  country String @default("")
+
+  // Branding
+  logoUrl    String @default("")
+  faviconUrl String @default("")
+
+  // Affiliate Program
+  affiliateEnabled Boolean @default(false)
+
+  // Social Media
+  socialMedia Json @default("{\"facebook\":\"\",\"twitter\":\"\",\"instagram\":\"\",\"linkedin\":\"\",\"youtube\":\"\"}")
+
+  // Map Integration
+  mapIframe String @default("") // Google Maps iframe embed code
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("company_settings")
+}
+
+model Banner {
+  id       String @id @default(auto()) @map("_id") @db.ObjectId
+  title    String // Alt text for image
+  imageUrl String // S3 key for banner image
+  linkUrl  String @default("") // URL to redirect when clicked
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("banners")
+}
+
+model PageSEO {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  // Page Identification
+  pagePath    String  @unique // e.g., "/", "/about", "/products", "/contact"
+  pageName    String // Display name for admin panel
+  description String? // Description of what this page is for
+
+  // SEO Fields
+  metaTitle       String  @default("")
+  metaDescription String  @default("")
+  metaKeywords    String  @default("")
+  ogImage         String? // Open Graph image URL
+
+  // Status
+  isActive Boolean @default(true)
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("page_seo")
+}
+
+model Policy {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  // Policy Identification
+  policyType String  @unique // privacy, terms, returns, shipping, cookie
+  title      String // Display title
+  slug       String  @unique // URL slug (e.g., "privacy-policy")
+
+  // Content
+  content String // Rich text content (HTML)
+
+  // Status
+  isActive   Boolean @default(true)
+  isPublished Boolean @default(false)
+
+  // Version Control
+  version     Int      @default(1)
+  lastUpdated DateTime @default(now())
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("policies")
+}
+
+// ============================================
+// EMAIL CONFIGURATION
+// ============================================
+
+model EmailConfiguration {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  smtpHost     String
+  smtpPort     String
+  smtpUsername String
+  smtpPassword String
+  fromEmail    String
+  fromName     String
+  encryption   String   @default("tls")
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("email_configurations")
+}
+
+
+
+// ============================================
+// PROCESSING SYSTEM
+// ============================================
+
+// Processing Pool - Stores raw materials that need processing
+model ProcessingPool {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  
+  // Item Reference
+  itemId            String   @db.ObjectId // Reference to Item (processing type)
+  itemName          String   // Denormalized for quick access
+  category          String
+  itemCode          String?
+  
+  // Warehouse Reference
+  warehouseId       String   @db.ObjectId
+  warehouseName     String   // Denormalized
+  
+  // Stock Information
+  currentStock      Float    @default(0) // Current available stock in pool
+  uom               String   // Unit of measurement
+  availableUoms     Json[]   @default([]) // Array of {uom: "g", conversionFactor: 1000}
+  
+  // Financial Tracking
+  avgPurchasePrice  Float    @default(0) // Weighted average purchase price
+  totalValue        Float    @default(0) // currentStock × avgPurchasePrice
+  
+  // Processing Statistics
+  totalPurchased    Float    @default(0) // Total quantity purchased
+  totalProcessed    Float    @default(0) // Total quantity processed
+  totalWastage      Float    @default(0) // Total wastage
+  
+  // Status
+  status            String   @default("active") // active, inactive
+  
+  // Timestamps
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relations
+  transactions      ProcessingTransaction[]
+  recipes           ProcessingRecipe[]
+
+  @@unique([itemId, warehouseId]) // One pool per item per warehouse
+  @@index([itemId])
+  @@index([warehouseId])
+  @@index([status])
+  @@map("processing_pool")
+}
+
+// Processing Transaction - Records each processing operation
+model ProcessingTransaction {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  transactionNumber String   @unique // PT-2024-001
+  
+  // Pool Reference
+  poolId            String   @db.ObjectId
+  pool              ProcessingPool @relation(fields: [poolId], references: [id])
+  
+  // Input (Raw Material)
+  inputItemId       String   @db.ObjectId
+  inputItemName     String
+  inputQuantity     Float    // Quantity consumed from pool
+  inputUom          String
+  inputUnitCost     Float    // Cost per unit at time of processing
+  inputTotalCost    Float    // inputQuantity × inputUnitCost
+  
+  // Warehouse
+  warehouseId       String   @db.ObjectId
+  warehouseName     String
+  
+  // Outputs (Finished Products) - Stored as JSON array
+  // Each output: { itemId, itemName, quantity, uom }
+  outputs           Json[]
+  
+  // Processing Details
+  wastagePercent    Float    @default(0)
+  wastageQuantity   Float    @default(0) // Calculated: inputQuantity × wastagePercent / 100
+  processingCost    Float    @default(0) // Additional processing cost (labor, utilities, etc.)
+  totalCost         Float    @default(0) // inputTotalCost + processingCost
+  
+  // Notes
+  notes             String?
+  
+  // Status
+  status            String   @default("completed") // completed, cancelled
+  
+  // Metadata
+  processedBy       String?  // User who processed
+  processedAt       DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([poolId])
+  @@index([inputItemId])
+  @@index([warehouseId])
+  @@index([processedAt])
+  @@map("processing_transactions")
+}
+
+// Processing Recipe - Remembers what items were created from each raw material
+model ProcessingRecipe {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  
+  // Pool Reference
+  poolId            String   @db.ObjectId
+  pool              ProcessingPool @relation(fields: [poolId], references: [id])
+  
+  // Input Item (Raw Material)
+  inputItemId       String   @db.ObjectId
+  inputItemName     String
+  
+  // Output Item (Finished Product)
+  outputItemId      String   @db.ObjectId
+  outputItemName    String
+  outputUom         String
+  
+  // Statistics
+  timesCreated      Int      @default(1) // How many times this output was created
+  totalQuantity     Float    @default(0) // Total quantity created across all transactions
+  
+  // Timestamps
+  firstCreatedAt    DateTime @default(now())
+  lastCreatedAt     DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([poolId, outputItemId]) // One recipe entry per output item per pool
+  @@index([poolId])
+  @@index([inputItemId])
+  @@index([outputItemId])
+  @@map("processing_recipes")
+}
+
+// ============================================
+// DELIVERY ZONES
+// ============================================
+
+  model DeliveryZone {
+    id        String   @id @default(auto()) @map("_id") @db.ObjectId
+    country   String   @default("India")
+    state     String
+    city      String
+    pincodes  String[] // ["625001", "625002", ...]
+    isActive  Boolean  @default(true)
+    isAllPincodes Boolean @default(false)
+    isAllCitiesInState Boolean @default(false)
+    isAllStatesInCountry Boolean @default(false)
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+  
+    @@unique([country, state, city])
+    @@map("delivery_zones")
+  }
+
+// ============================================
+// DELIVERY CHARGE SETTINGS
+// ============================================
+
+model DeliveryCharge {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  minOrderValue   Float    @default(0)    // Minimum order value for free delivery
+  chargeAmount    Float    @default(0)    // Fixed charge for orders below minimum
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("delivery_charges")
+}
+
+// ============================================
+// ENQUIRIES
+// ============================================
+
+model BulkOrderEnquiry {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  name            String
+  phone           String
+  companyName     String?
+  productDetails  String
+  quantity        String
+  deliveryDate    String?
+  message         String?
+  status          String   @default("pending") // pending, contacted, completed, cancelled
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("bulk_order_enquiries")
+}
+
+model CateringServiceEnquiry {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  name            String
+  phone           String
+  eventType       String
+  eventDate       String
+  eventTime       String?
+  guestCount      String
+  venue           String?
+  menuPreferences String?
+  budget          String?
+  message         String?
+  status          String   @default("pending") // pending, contacted, completed, cancelled
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("catering_service_enquiries")
+}
+
+// ============================================
+// ORDER SCHEDULE SETTINGS
+// ============================================
+
+model OrderScheduleSettings {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  // Live Order Window (e.g., 05:00 AM - 11:59 AM)
+  liveOrderEnabled   Boolean @default(true)
+  liveOrderStartTime String  @default("05:00") // 24hr "HH:MM"
+  liveOrderEndTime   String  @default("11:59") // 24hr "HH:MM"
+  liveOrderLabel     String  @default("Live Order")
+
+  // Pre-Order Window (e.g., 12:00 PM - 11:59 PM)
+  preOrderEnabled   Boolean @default(true)
+  preOrderStartTime String  @default("12:00") // 24hr "HH:MM"
+  preOrderEndTime   String  @default("23:59") // 24hr "HH:MM"
+  preOrderLabel     String  @default("Pre-Order")
+
+  // Countdown Banner in website header
+  countdownEnabled Boolean @default(true)
+
+  // Delivery Slots (JSON array of strings)
+  deliverySlots    Json?   // e.g. ["09:00 AM - 12:00 PM", "12:00 PM - 03:00 PM"]
+  schedulingEnabled Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("order_schedule_settings")
+}

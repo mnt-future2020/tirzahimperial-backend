@@ -1,0 +1,60 @@
+{
+  "name": "monolith-ecommerce-backend",
+  "version": "1.0.0",
+  "description": "Monolith E-Commerce Platform Backend",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "build": "prisma generate",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio",
+    "db:migrate": "prisma migrate dev",
+    "seed:tirzah:inventory": "node scripts/seed-tirzah-inventory-items.js",
+    "seed:tirzah:online-products": "node scripts/seed-tirzah-online-products.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev:webhook": "ngrok http --url=endlessly-adapted-shepherd.ngrok-free.app 5000"
+  },
+  "keywords": [
+    "ecommerce",
+    "monolith",
+    "express",
+    "mongodb",
+    "prisma"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.958.0",
+    "@aws-sdk/s3-request-presigner": "^3.958.0",
+    "@prisma/client": "^6.19.0",
+    "axios": "^1.13.2",
+    "bcrypt": "^6.0.0",
+    "connect-mongo": "^5.1.0",
+    "convert-units": "^2.3.4",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.1",
+    "express": "^5.1.0",
+    "express-session": "^1.18.2",
+    "firebase-admin": "^13.6.0",
+    "groq-sdk": "^0.35.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.2",
+    "node-cron": "^3.0.3",
+    "nodemailer": "^7.0.5",
+    "passport": "^0.7.0",
+    "passport-google-oauth20": "^2.0.0",
+    "passport-local": "^1.0.0",
+    "pdfkit": "^0.15.2",
+    "prisma": "^6.19.0",
+    "puppeteer": "^24.31.0",
+    "razorpay": "^2.9.6",
+    "socket.io": "^4.7.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.0"
+  }
+}
