@@ -13,17 +13,17 @@ const getCompanyLogo = async () => {
     
     if (webSettings?.logoUrl) {
       // logoUrl field contains the S3 key, use the proxy endpoint
-      const backendUrl = process.env.BACKEND_URL || 'http://localhost:5000';
+      const backendUrl = process.env.BACKEND_URL || 'https://api.tirzahimperial.com';
       return `${backendUrl}/api/web/web-settings/logo`;
     }
     
     // Fallback to default logo from frontend
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const frontendUrl = process.env.FRONTEND_URL || 'https://tirzahimperial.com';
     return `${frontendUrl}/logo.jpeg`;
   } catch (error) {
     console.error('❌ Error fetching company logo:', error);
     // Fallback to default logo
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const frontendUrl = process.env.FRONTEND_URL || 'https://tirzahimperial.com';
     return `${frontendUrl}/logo.jpeg`;
   }
 };

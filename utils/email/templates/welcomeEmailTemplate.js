@@ -39,7 +39,7 @@ async function getCompanyName() {
  */
 const getWelcomeEmailTemplate = async (data) => {
   const { email, name } = data;
-  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+  const frontendUrl = process.env.FRONTEND_URL || "https://tirzahimperial.com";
   const logoUrl = await getCompanyLogo();
   const companyName = await getCompanyName();
 

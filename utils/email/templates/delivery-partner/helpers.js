@@ -33,13 +33,13 @@ async function getCompanyData() {
       companyName: companySettings?.companyName || admin?.companyName || "Our Company",
       companyEmail: companySettings?.email || admin?.email || "support@example.com",
       companyPhone: companySettings?.phone || admin?.phoneNumber || "+91 1800-XXX-XXXX",
-      companyWebsite: companySettings?.website || process.env.FRONTEND_URL || "http://localhost:3000",
+      companyWebsite: companySettings?.website || process.env.FRONTEND_URL || "https://tirzahimperial.com",
       
       // Logo
       logoUrl: logoUrl,
       
       // URLs
-      frontendUrl: process.env.FRONTEND_URL || "http://localhost:3000",
+      frontendUrl: process.env.FRONTEND_URL || "https://tirzahimperial.com",
       
       // Support contact (use company email as support email)
       supportEmail: companySettings?.email || admin?.email || "support@example.com",
@@ -55,9 +55,9 @@ async function getCompanyData() {
       companyName: "Our Company",
       companyEmail: "support@example.com",
       companyPhone: "+91 1800-XXX-XXXX",
-      companyWebsite: process.env.FRONTEND_URL || "http://localhost:3000",
+      companyWebsite: process.env.FRONTEND_URL || "https://tirzahimperial.com",
       logoUrl: null,
-      frontendUrl: process.env.FRONTEND_URL || "http://localhost:3000",
+      frontendUrl: process.env.FRONTEND_URL || "https://tirzahimperial.com",
       supportEmail: "support@example.com",
       supportPhone: "+91 1800-XXX-XXXX",
     };

@@ -120,6 +120,8 @@ const allowedOrigins = [
   "http://localhost:5000",
   "http://localhost:8081", // Expo web dev server
   "http://localhost:19006", // Alternative Expo web port
+  "https://tirzahimperial.com",
+  "https://www.tirzahimperial.com",
   "https://cosmetics-blond-alpha.vercel.app",
   "https://cosmetics-7a21.vercel.app",
 ].filter(Boolean).map(origin => origin.replace(/\/$/, "")); // Normalize by removing trailing slashes
@@ -263,7 +265,7 @@ server.listen(PORT, async () => {
     console.log("✅ Monolith E-Commerce Backend Started Successfully");
     console.log("═══════════════════════════════════════════════════");
     console.log(`📍 Port: ${PORT}`);
-    console.log(`🌐 Frontend: ${process.env.FRONTEND_URL || "http://localhost:3000"}`);
+    console.log(`🌐 Frontend: ${process.env.FRONTEND_URL || "https://tirzahimperial.com"}`);
     console.log(`🗄️  Database: ${process.env.MONGO_URL?.split('/').pop()?.split('?')[0] || "monolith-ecommerce"}`);
     console.log("═══════════════════════════════════════════════════");
     console.log("📡 API Routes:");
